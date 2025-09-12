@@ -1,4 +1,4 @@
-// gcc -o gerar_exemplos /src/gerar_exemplos.c
+// gcc -o gerar_exemplos src/gerar_exemplos.c
 // ./gerar_exemplos 100000 testes/entradas/ex_pequeno.txt
 // ./gerar_exemplos 1000000 testes/entradas/ex_medio.txt
 // ./gerar_exemplos 10000000 testes/entradas/ex_grande.txt
@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     int num_seqs = atoi(argv[1]);
     
     // Geração aleatória de keys com base na hora
-    srand(time(0));
+    //srand(time(0));
     
     // Abertura de arquivo txt
     FILE* arquivo = fopen(argv[2], "w");
