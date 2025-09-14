@@ -1,3 +1,4 @@
+// gcc -Iincludes src/gerar_exemplos.c src/funcoes.c -o gerar_exemplos
 // gcc -o gerar_exemplos src/gerar_exemplos.c
 // ./gerar_exemplos 100000 testes/entradas/ex_pequeno.txt
 // ./gerar_exemplos 1000000 testes/entradas/ex_medio.txt
@@ -8,16 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "../include/funcoes.h"
 
 #define MAX_SEQ_LENGTH 100
 #define DNA_CHARS "ACGT"
-
-void generate_dna_sequence(char* seq, int length) {
-    for (int i = 0; i < length; i++) {
-        seq[i] = DNA_CHARS[rand() % 4];
-    }
-    seq[length] = '\0';
-}
 
 int main(int argc, char *argv[]) {
     
