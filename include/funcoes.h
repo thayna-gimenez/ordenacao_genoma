@@ -6,8 +6,9 @@
 
 #include <time.h>
 
-// Leitura de Arquivo
+// Arquivo
 char** ler_arquivo(char* filename, int* total_seqs);
+void escrever_arquivo(char* nome_arquivo, char** dna_sequencia, int total_seqs);
 
 // Gerar DNA
 void generate_dna_sequence(char* seq, int length);

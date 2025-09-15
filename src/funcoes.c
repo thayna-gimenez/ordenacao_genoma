@@ -4,9 +4,8 @@
 #include <time.h>
 #include "../include/funcoes.h"
 
-
 char** ler_arquivo(char* nome_arquivo, int* total_seqs){
-    
+
     // Abertura do arquivo
     FILE* arquivo = fopen(nome_arquivo, "r");
     if (!arquivo) {
@@ -18,6 +17,13 @@ char** ler_arquivo(char* nome_arquivo, int* total_seqs){
     *total_seqs = 0;
     char buffer[MAX_SEQ_LENGTH + 2];
     
+    while (fgets(buffer, sizeof(buffer), arquivo)) {
+        if (buffer[0] == '\n' || buffer[0] == '\0') {
+            continue;
+        }
+        (*total_seqs)++;
+    }
+
     // Volta pro início do arquivo (complementa o código acima)
     rewind(arquivo);
 
@@ -29,33 +35,45 @@ char** ler_arquivo(char* nome_arquivo, int* total_seqs){
         return NULL;
     }
     
-    // Leitura das sequências
+    // Leitura e gravação das sequências
     int cont = 0;
     while (fgets(buffer, sizeof(buffer), arquivo) && cont < *total_seqs) {
         // Ignora linhas vazias
         if (buffer[0] == '\n' || buffer[0] == '\0') {
             continue;
         }
-    }
-    
-    // fgets adiciona uma quebra de linha, removendo...
-    buffer[strcspn(buffer, "\n")] = '\0';
 
-    // Gravação das sequências
-    sequencia[cont] = (char*)malloc(((strlen(buffer) + 1) * sizeof(char)));
-    if (!sequencia[cont]) { // se houver erro
-        printf("Erro de alocação de memória");
-        for (int i = 0; i < cont; i++) {
-            free(sequencia[cont]);
-        }
+        // Removendo quebra de linha que o fgets coloca
+        buffer[strcspn(buffer, "\n")] = '\0';
+
+        // Alocação de memória para as sequências
+        sequencia[cont] = (char*)malloc((strlen(buffer) + 1) * sizeof(char));
+        if (!sequencia[cont]) { // se houver erro
+            printf("Erro de alocação de memória.");
+            for (int i = 0; i < cont; i++) {
+                free(sequencia[i]);
+            }
         
-        free(sequencia);
-        fclose(arquivo);
-        return NULL;
+            free(sequencia);
+            fclose(arquivo);
+            return NULL;
+        }
+    
+        strcpy(sequencia[cont], buffer);
+        cont++;
+    }
+
+    return sequencia;
+}
+
+void escrever_arquivo(char* nome_arquivo, char** dna_sequencia, int total_seqs){
+    FILE* arquivo = fopen(nome_arquivo, "w");
+
+    for (int i = 0; i < total_seqs; i++) {
+        fprintf(arquivo, "%s\n", dna_sequencia[i]);
     }
     
-    strcpy(sequencia[cont], buffer);
-    return sequencia;
+    fclose(arquivo);
 }
 
 void generate_dna_sequence(char* seq, int length) {
@@ -66,7 +84,7 @@ void generate_dna_sequence(char* seq, int length) {
 }
 
 int compare_dna(const void* a, const void* b) {
-    return strcmp((char*)a, (char*)b);
+    return strcmp(*(char**)a, *(char**)b);
 }
 
 void sequential_sort(char** data, int n) {
