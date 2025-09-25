@@ -28,7 +28,6 @@ int main(int argc, char *argv[]) {
     sequential_sort(dna_sequencias, total_seqs);
 
     // Arquivo de saída
-
     escrever_arquivo(arq_saida, dna_sequencias, total_seqs);
 
     free(dna_sequencias);
