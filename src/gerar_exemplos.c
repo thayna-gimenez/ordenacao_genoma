@@ -39,7 +39,6 @@ int main(int argc, char *argv[]) {
         generate_dna_sequence(sequencia, tamanho);
         fprintf(arquivo, "%s\n", sequencia);
     }
-    
 
     fclose(arquivo);
     return 0;

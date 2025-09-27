@@ -87,6 +87,12 @@ int compare_dna(const void* a, const void* b) {
     return strcmp(*(char**)a, *(char**)b);
 }
 
+void swap_dna(char **a, char **b) {
+    char *temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
 void sequential_sort(char** data, int n) {
     qsort(data, n, sizeof(char*), compare_dna);
 }
