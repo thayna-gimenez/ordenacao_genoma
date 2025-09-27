@@ -1,83 +1,82 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <mpi.h>
 #include "../include/funcoes.h"
 
-// mpicc -Iincludes src/paralelo.c src/funcoes.c -o codigo_paralelo
-// gcc -o codigo_sequencial src/sequencial.c
-// ./codigo_paralelo testes/entradas/ex_minusculo.txt testes/saidas/saida_minusculo.txt
-
 #define MAX_SEQ_LENGTH 100
-#define DNA_CHARS "ACGT"
 
 int main(int argc, char *argv[]) {
-    int rank, size;
-
+    int rank, size, total_seqs;
+    
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    
+
     char* arq_entrada = argv[1];
     char* arq_saida = argv[2];
-
-    int total_seqs;
     char** dna_sequencias = NULL;
+    char** vetor_local = NULL;
+    char *buffer_local = NULL;
+    
     if (rank == 0) {
-        // Leitura de Arquivo no processador 0    
         dna_sequencias = ler_arquivo(arq_entrada, &total_seqs);
     }
 
     MPI_Bcast(&total_seqs, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Cálculo dos tamanhos locais
     int base = total_seqs / size;
-    int resto_local = total_seqs;
-    int tamanho_local = base + (rank < resto_local ? 1 : 0);
+    int resto = total_seqs % size;
+    int counter_local = base + (rank < resto ? 1 : 0);
 
-    char (*vetor_local)[MAX_SEQ_LENGTH] = malloc(tamanho_local * MAX_SEQ_LENGTH);
+    vetor_local = malloc(counter_local * sizeof(char*));
+    buffer_local = malloc(counter_local * MAX_SEQ_LENGTH);
 
-    if (rank == 0){
-        // Vetores de tamanho p para especificar o número de elementos de cada vetor e o displacement 
-        int *sendcounts = (int*)malloc(size * sizeof(int));
-        int *displs = (int*)malloc(size * sizeof(int));
+    for (int i = 0; i < counter_local; i++) {
+        vetor_local[i] = &buffer_local[i * MAX_SEQ_LENGTH];
+    }
 
-        // Cálculo dos vetores
+    if (rank == 0) {
+        int *sendcounts = malloc(size * sizeof(int));
+        int *displs = malloc(size * sizeof(int));
         int deslocamento = 0;
-        for (int i = 0; i < size; i++){
-            sendcounts[i] = base;
-            
-            if (i < resto_local){ 
-                sendcounts[i] += 1 ;
-            }
-            
-            displs[i] = deslocamento;
-            deslocamento += sendcounts[i];
+        
+        for (int i = 0; i < size; i++) {
+            int count_i = base + (i < resto ? 1 : 0);
+            sendcounts[i] = count_i * MAX_SEQ_LENGTH;
+            displs[i] = deslocamento * MAX_SEQ_LENGTH;
+            deslocamento += count_i;
         }
-
-        // Distribuição dos dados entre os processadores
-        MPI_Scatterv(dna_sequencias, sendcounts, displs, MPI_CHAR, vetor_local, tamanho_local * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
-
-        free(dna_sequencias);
+        
+        char *temp_buffer = malloc(total_seqs * MAX_SEQ_LENGTH);
+        for (int i = 0; i < total_seqs; i++) {
+            strncpy(&temp_buffer[i * MAX_SEQ_LENGTH], dna_sequencias[i], MAX_SEQ_LENGTH);
+        }
+        
+        MPI_Scatterv(temp_buffer, sendcounts, displs, MPI_CHAR,
+                    buffer_local, counter_local * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
+        
+        free(temp_buffer);
         free(sendcounts);
         free(displs);
     } else {
         MPI_Scatterv(NULL, NULL, NULL, MPI_CHAR,
-                    vetor_local, tamanho_local * MAX_SEQ_LENGTH, MPI_CHAR,
-                    0, MPI_COMM_WORLD);
+                    buffer_local, counter_local * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
 
-    printf("Processo %d recebeu %d elementos: ", rank, tamanho_local);
-    for (int i = 0; i < tamanho_local; i++) {
-        printf("%s ", vetor_local[i]);
+    printf("Processo %d: %d strings\n", rank, counter_local);
+    for (int i = 0; i < counter_local; i++) {
+        printf("  [P%d] %s\n", rank, vetor_local[i]);
     }
-    printf("\n");
-
-    // Arquivo de saída
-    //escrever_arquivo(arq_saida, dna_sequencias, total_seqs);
-
-    free(vetor_local);
+    
+    free(vetor_local); 
+    free(buffer_local);  
+    
+    if (rank == 0) {
+        for (int i = 0; i < total_seqs; i++) free(dna_sequencias[i]);
+        free(dna_sequencias);
+    }
+    
     MPI_Finalize();
     return 0;
-}
+}   

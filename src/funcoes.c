@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "../include/funcoes.h"
+#define MAX_SEQ_LENGTH 100
 
 char** ler_arquivo(char* nome_arquivo, int* total_seqs){
 
