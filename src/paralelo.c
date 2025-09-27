@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
     char* arq_saida = argv[2];
     char** dna_sequencias = NULL;
     char** vetor_local = NULL;
-    char *buffer_local = NULL;
+    char* buffer_local = NULL;
     
     if (rank == 0) {
         dna_sequencias = ler_arquivo(arq_entrada, &total_seqs);
@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
 
     MPI_Bcast(&total_seqs, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+    // Enviando elementos para cada processador
     int base = total_seqs / size;
     int resto = total_seqs % size;
     int counter_local = base + (rank < resto ? 1 : 0);
@@ -63,14 +64,39 @@ int main(int argc, char *argv[]) {
         MPI_Scatterv(NULL, NULL, NULL, MPI_CHAR,
                     buffer_local, counter_local * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
+    
+    //Ordenação local
+    sequential_sort(vetor_local, counter_local);
+
+    // Escolhendo samples em cada processador
+    char** samples_locais;
 
     printf("Processo %d: %d strings\n", rank, counter_local);
+    if (counter_local > (size-1)){
+        samples_locais = malloc((size - 1) * sizeof(char)); // vai ter m-1 samples
+        for (int i = 0; i < size-1; i++){
+            samples_locais[i] = vetor_local[((i+1) * counter_local) / size];
+        }
+    } else {
+        samples_locais = malloc(counter_local * sizeof(char)); // vai pegar todos os elementos
+        for (int i = 0; i < counter_local; i++){
+            samples_locais[i] = vetor_local[((i+1) * counter_local) / size];
+        }
+    }
+    
+    
+    
     for (int i = 0; i < counter_local; i++) {
         printf("  [P%d] %s\n", rank, vetor_local[i]);
     }
-    
+    // for (int i = 0; i < size-1; i++) {
+    //     printf("%s\n", samples_locais[i]);
+    // }
+
+    // Liberando memória
+    free(samples_locais); 
     free(vetor_local); 
-    free(buffer_local);  
+    free(buffer_local); 
     
     if (rank == 0) {
         for (int i = 0; i < total_seqs; i++) free(dna_sequencias[i]);
