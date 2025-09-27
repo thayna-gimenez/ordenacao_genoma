@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <mpi.h>
 #include "../include/funcoes.h"
 #define MAX_SEQ_LENGTH 100
 
@@ -96,4 +97,45 @@ void swap_dna(char **a, char **b) {
 
 void sequential_sort(char** data, int n) {
     qsort(data, n, sizeof(char*), compare_dna);
+}
+
+void distribuir_sequencias(char** dna_sequencias, char*** vetor_local, char** buffer_local, int* counter_local, int total_seqs, int rank, int size){
+    int base = total_seqs / size;
+    int resto = total_seqs % size;
+    *counter_local = base + (rank < resto ? 1 : 0);
+
+    *vetor_local = malloc((*counter_local) * sizeof(char*));
+    *buffer_local = malloc((*counter_local) * MAX_SEQ_LENGTH);
+
+    for (int i = 0; i < *counter_local; i++) {
+        (*vetor_local)[i] = &(*buffer_local)[i * MAX_SEQ_LENGTH];
+    }
+
+    if (rank == 0) {
+        int *sendcounts = malloc(size * sizeof(int));
+        int *displs = malloc(size * sizeof(int));
+        int deslocamento = 0;
+        
+        for (int i = 0; i < size; i++) {
+            int count_i = base + (i < resto ? 1 : 0);
+            sendcounts[i] = count_i * MAX_SEQ_LENGTH;
+            displs[i] = deslocamento * MAX_SEQ_LENGTH;
+            deslocamento += count_i;
+        }
+        
+        char *temp_buffer = malloc(total_seqs * MAX_SEQ_LENGTH);
+        for (int i = 0; i < total_seqs; i++) {
+            strncpy(&temp_buffer[i * MAX_SEQ_LENGTH], dna_sequencias[i], MAX_SEQ_LENGTH);
+        }
+        
+        MPI_Scatterv(temp_buffer, sendcounts, displs, MPI_CHAR,
+                    *buffer_local, (*counter_local) * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
+        
+        free(temp_buffer);
+        free(sendcounts);
+        free(displs);
+    } else {
+        MPI_Scatterv(NULL, NULL, NULL, MPI_CHAR, *buffer_local, (*counter_local) * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+    }
 }
