@@ -21,4 +21,6 @@ void sequential_sort(char** data, int n);
 void distribuir_sequencias(char** dna_sequencias, char*** vetor_local, char** buffer_local, int* counter_local, int total_seqs, int rank, int size);
 char** escolher_samples(char** vetor_local, int counter_local, int size, int* tamanho_samples);
 int* coletar_n_amostras_no_root(int meu_n_amostras, int rank, int size);
+char** enviar_samples(char** samples_locais, int* n_amostras_por_processo, int tamanho_samples, int* qtde_amostras, int rank, int size);
+
 #endif
