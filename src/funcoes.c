@@ -251,3 +251,17 @@ char** enviar_samples(char** samples_locais, int* n_amostras_por_processo, int t
 
     return samples;
 }
+
+char** selecionar_samples_globais(char** samples, int qtde_amostras, int* qtde_amostras_globais, int rank, int size){
+    if (rank == 0) {
+        sequential_sort(samples, qtde_amostras);
+        (*qtde_amostras_globais) = size - 1;
+        char** samples_globais = malloc((*qtde_amostras_globais) * sizeof(char*));
+
+        // Escolhendo m-1 samples globais igualmente espaçados dentro de cada processador
+        for (int i = 0; i < (*qtde_amostras_globais); i++){
+            samples_globais[i] = samples[((i+1) * qtde_amostras) / size];
+            printf(" %s\n", samples_globais[i]);
+        }
+    }
+}
