@@ -42,6 +42,9 @@ int main(int argc, char *argv[]) {
 
     int qtde_amostras;
     char** samples = enviar_samples(samples_locais, n_amostras_por_processo, tamanho_samples, &qtde_amostras, rank, size);
+    MPI_Bcast(&qtde_amostras, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    
+    
 
     // Liberando memória
     free(vetor_local); 

@@ -211,7 +211,6 @@ char** enviar_samples(char** samples_locais, int* n_amostras_por_processo, int t
 
     MPI_Bcast(recvcounts, size, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(displs, size, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&qtde_amostras, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Cria buffer contíguo para envio
     char *send_buffer = malloc(tamanho_samples * MAX_SEQ_LENGTH * sizeof(char));
@@ -237,7 +236,6 @@ char** enviar_samples(char** samples_locais, int* n_amostras_por_processo, int t
             for (int i = 0; i < n_proc; i++) {
                 strncpy(samples[current_index], &recv_buffer[displs[proc] + i * MAX_SEQ_LENGTH], MAX_SEQ_LENGTH);
                 samples[current_index][MAX_SEQ_LENGTH - 1] = '\0';
-                printf("%s\n", samples[current_index]);
                 current_index++;
             }
         }
