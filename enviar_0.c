@@ -1,4 +1,26 @@
-// Enviando os samples para o processador 0
+//Ordenação local
+    sequential_sort(vetor_local, counter_local);
+
+    // Escolhendo samples em cada processador
+    char** samples_locais;
+    int tamanho_samples;
+
+    printf("Processo %d: %d strings\n", rank, counter_local);
+    if (counter_local > (size-1)){
+        tamanho_samples = size - 1;
+        samples_locais = malloc(tamanho_samples * sizeof(char)); // vai ter m-1 samples
+        for (int i = 0; i < size-1; i++){
+            samples_locais[i] = vetor_local[((i+1) * counter_local) / size];
+        }
+    } else {
+        tamanho_samples = counter_local;
+        samples_locais = malloc(tamanho_samples * sizeof(char)); // vai ter todos os elementos do vetor local
+        for (int i = 0; i < counter_local; i++){
+            samples_locais[i] = vetor_local[i];
+        }
+    }
+    
+    // Enviando os samples para o processador 0
     int* recvcounts = NULL;
     int* displs = NULL;
     int qtde_amostras = tamanho_samples * size;
