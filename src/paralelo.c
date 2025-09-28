@@ -40,11 +40,22 @@ int main(int argc, char *argv[]) {
     char** samples_locais = escolher_samples(vetor_local, counter_local, size, &tamanho_samples);
     int* n_amostras_por_processo = coletar_n_amostras_no_root(tamanho_samples, rank, size);
 
+    // Enviando samples para o processador 0
     int qtde_amostras;
     char** samples = enviar_samples(samples_locais, n_amostras_por_processo, tamanho_samples, &qtde_amostras, rank, size);
     MPI_Bcast(&qtde_amostras, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    
-    
+
+    if (rank == 0) {
+        sequential_sort(samples, qtde_amostras);
+        int qtde_amostras_globais = size - 1;
+        char** samples_globais = malloc(qtde_amostras_globais * sizeof(char*));
+
+        // Escolhendo m-1 samples globais igualmente espaçados dentro de cada processador
+        for (int i = 0; i < qtde_amostras_globais; i++){
+            samples_globais[i] = samples[((i+1) * qtde_amostras) / size];
+            printf(" %s\n", samples_globais[i]);
+        }
+    }
 
     // Liberando memória
     free(vetor_local); 
