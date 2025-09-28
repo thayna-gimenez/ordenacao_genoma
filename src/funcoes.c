@@ -139,3 +139,38 @@ void distribuir_sequencias(char** dna_sequencias, char*** vetor_local, char** bu
 
     }
 }
+
+char** escolher_samples(char** vetor_local, int counter_local, int size, int* tamanho_samples){
+    char** samples_locais; 
+    
+    if (counter_local > (size-1)){
+        *tamanho_samples = size - 1; // vai ter m-1 samples
+        samples_locais = malloc(*tamanho_samples * sizeof(char*));
+        for (int i = 0; i < size-1; i++){
+            samples_locais[i] = vetor_local[((i+1) * counter_local) / size];
+        }
+    } else {
+        *tamanho_samples = counter_local; // vai pegar todos os elementos
+        samples_locais = malloc(*tamanho_samples * sizeof(char*));
+        for (int i = 0; i < counter_local; i++){
+            samples_locais[i] = vetor_local[i];
+        }
+    }
+
+    return samples_locais;
+}
+
+int* coletar_n_amostras_no_root(int meu_n_amostras, int rank, int size) {
+    int *n_amostras_por_processo = NULL;
+    
+    if (rank == 0) {
+        n_amostras_por_processo = malloc(size * sizeof(int));
+    }
+    
+    // Cada processo envia seu valor para o root
+    MPI_Gather(&meu_n_amostras, 1, MPI_INT,
+               n_amostras_por_processo, 1, MPI_INT,
+               0, MPI_COMM_WORLD);
+    
+    return n_amostras_por_processo;  // Root retorna o array, outros retornam NULL
+}
