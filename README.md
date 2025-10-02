@@ -1,7 +1,6 @@
 # Ordenação Paralela de Dados Genômicos com MPI
 
-# Descrição
-Implementação paralela de algoritmo de ordenação para grandes volumes de dados genômicos usando MPI, para comparação com o código sequencial de ordenação (quicksort).
+Implementação paralela de algoritmo de ordenação para grandes volumes de dados genômicos usando MPI, para comparação com código sequencial de ordenação quicksort.
 
 **Gerar exemplos**  
 
@@ -32,5 +31,6 @@ mpicc -O3 -Iincludes src/paralelo.c src/funcoes.c -o codigo_paralelo
 
 # Ordenar 10 milhões com 12 processadores
 mpirun -np 12 ./codigo_paralelo testes/entradas/ex_grande.txt testes/saidas/saida_grande.txt
+
 
 ```
