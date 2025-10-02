@@ -1,5 +1,4 @@
 // gcc -Iincludes src/gerar_exemplos.c src/funcoes.c -o gerar_exemplos
-// gcc -o gerar_exemplos src/gerar_exemplos.c
 // ./gerar_exemplos 100000 testes/entradas/ex_pequeno.txt
 // ./gerar_exemplos 1000000 testes/entradas/ex_medio.txt
 // ./gerar_exemplos 10000000 testes/entradas/ex_grande.txt
