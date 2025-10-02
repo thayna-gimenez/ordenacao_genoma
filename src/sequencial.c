@@ -1,5 +1,4 @@
-// gcc -Iincludes src/sequencial.c src/funcoes.c -o codigo_sequencial
-// gcc -o codigo_sequencial src/sequencial.c
+// mpicc -Iincludes src/sequencial.c src/funcoes.c -o codigo_sequencial
 // ./codigo_sequencial entrada.txt saida.txt
 
 #include <stdio.h>
@@ -12,6 +11,7 @@
 #define DNA_CHARS "ACGT"
 
 int main(int argc, char *argv[]) {
+    clock_t inicio, fim;
     
     if (argc != 3) {
         printf("Erro de comando.");
@@ -25,7 +25,13 @@ int main(int argc, char *argv[]) {
     int total_seqs;
     char** dna_sequencias = ler_arquivo(arq_entrada, &total_seqs);
     
+    inicio = clock();
     sequential_sort(dna_sequencias, total_seqs);
+    fim = clock();
+
+    double tempo = (double)(fim - inicio)/CLOCKS_PER_SEC;
+
+    printf("%f", tempo);
 
     // Arquivo de saída
     escrever_arquivo(arq_saida, dna_sequencias, total_seqs);

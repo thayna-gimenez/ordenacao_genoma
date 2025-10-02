@@ -99,68 +99,90 @@ void sequential_sort(char** data, int n) {
     qsort(data, n, sizeof(char*), compare_dna);
 }
 
-void distribuir_sequencias(char** dna_sequencias, char*** vetor_local, char** buffer_local, int* counter_local, int total_seqs, int rank, int size){
+void sequential_sort_parallel(char** data, int n) {
+    #pragma omp parallel
+    {
+        #pragma omp single nowait
+        qsort(data, n, sizeof(char*), compare_dna);
+    }
+}
+
+void distribuir_sequencias(char** dna_sequencias,
+                           char*** vetor_local,
+                           char** buffer_local,
+                           int* counter_local,
+                           int total_seqs,
+                           int rank,
+                           int size) {
     int base = total_seqs / size;
     int resto = total_seqs % size;
     *counter_local = base + (rank < resto ? 1 : 0);
 
-    *vetor_local = malloc((*counter_local) * sizeof(char*));
+    // Cada processo aloca o espaço local (contíguo)
     *buffer_local = malloc((*counter_local) * MAX_SEQ_LENGTH);
-
+    *vetor_local = malloc((*counter_local) * sizeof(char*));
     for (int i = 0; i < *counter_local; i++) {
         (*vetor_local)[i] = &(*buffer_local)[i * MAX_SEQ_LENGTH];
     }
+
+    // Criar tipo MPI para string fixa
+    MPI_Datatype dna_type;
+    MPI_Type_contiguous(MAX_SEQ_LENGTH, MPI_CHAR, &dna_type);
+    MPI_Type_commit(&dna_type);
 
     if (rank == 0) {
         int *sendcounts = malloc(size * sizeof(int));
         int *displs = malloc(size * sizeof(int));
         int deslocamento = 0;
-        
+
         for (int i = 0; i < size; i++) {
             int count_i = base + (i < resto ? 1 : 0);
-            sendcounts[i] = count_i * MAX_SEQ_LENGTH;
-            displs[i] = deslocamento * MAX_SEQ_LENGTH;
+            sendcounts[i] = count_i;
+            displs[i] = deslocamento;
             deslocamento += count_i;
         }
-        
+
+        // Criar buffer contíguo apenas uma vez
         char *temp_buffer = malloc(total_seqs * MAX_SEQ_LENGTH);
         for (int i = 0; i < total_seqs; i++) {
             strncpy(&temp_buffer[i * MAX_SEQ_LENGTH], dna_sequencias[i], MAX_SEQ_LENGTH);
         }
-        
-        MPI_Scatterv(temp_buffer, sendcounts, displs, MPI_CHAR,
-                    *buffer_local, (*counter_local) * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
-        
+
+        // Scatter usando o novo tipo
+        MPI_Scatterv(temp_buffer, sendcounts, displs, dna_type,
+                     *buffer_local, *counter_local, dna_type,
+                     0, MPI_COMM_WORLD);
+
         free(temp_buffer);
         free(sendcounts);
         free(displs);
     } else {
-        MPI_Scatterv(NULL, NULL, NULL, MPI_CHAR, *buffer_local, (*counter_local) * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
-
+        MPI_Scatterv(NULL, NULL, NULL, dna_type,
+                     *buffer_local, *counter_local, dna_type,
+                     0, MPI_COMM_WORLD);
     }
+
+    MPI_Type_free(&dna_type);
 }
 
 char** escolher_samples(char** vetor_local, int counter_local, int size, int* tamanho_samples){
-    char** samples_locais; 
+    char** samples_locais;
     
     if (counter_local > (size-1)){
-        *tamanho_samples = size - 1; // vai ter m-1 samples
-        samples_locais = malloc(*tamanho_samples * sizeof(char*));
-        for (int i = 0; i < size-1; i++){
-            samples_locais[i] = vetor_local[((i+1) * counter_local) / size];
-        }
+        *tamanho_samples = size * (size - 1); // vai ter m-1 samples
     } else {
         *tamanho_samples = counter_local; // vai pegar todos os elementos
-        samples_locais = malloc(*tamanho_samples * sizeof(char*));
-        for (int i = 0; i < counter_local; i++){
-            samples_locais[i] = vetor_local[i];
-        }
     }
+
+    samples_locais = malloc(*tamanho_samples * sizeof(char*));
+        for (int i = 0; i < *tamanho_samples; i++){
+            samples_locais[i] = vetor_local[((i+1) * counter_local) / (*tamanho_samples + 1)];
+        }
 
     return samples_locais;
 }
 
-int* coletar_n_amostras_no_root(int meu_n_amostras, int rank, int size) {
+int* coletar_n_amostras_no_root(int tamanho_samples, int rank, int size) {
     int *n_amostras_por_processo = NULL;
     
     if (rank == 0) {
@@ -168,17 +190,14 @@ int* coletar_n_amostras_no_root(int meu_n_amostras, int rank, int size) {
     }
     
     // Cada processo envia seu valor para o root
-    MPI_Gather(&meu_n_amostras, 1, MPI_INT,
+    MPI_Gather(&tamanho_samples, 1, MPI_INT,
                n_amostras_por_processo, 1, MPI_INT,
                0, MPI_COMM_WORLD);
     
     return n_amostras_por_processo;  // Root retorna o array, outros retornam NULL
 }
 
-// --- enviar_samples (corrigido) ---
-char** enviar_samples(char** samples_locais, int* n_amostras_por_processo,
-                      int tamanho_samples, int* qtde_amostras,
-                      int rank, int size)
+char** enviar_samples(char** samples_locais, int* n_amostras_por_processo, int tamanho_samples, int* qtde_amostras, int rank, int size)
 {
     char **samples = NULL;
     char *recv_buffer = NULL;
@@ -244,27 +263,38 @@ char** enviar_samples(char** samples_locais, int* n_amostras_por_processo,
 
 char** selecionar_samples_globais(char** samples, int qtde_amostras, int* qtde_amostras_globais, int rank, int size){
     char** samples_globais = NULL;
+    
     if (rank == 0) {
-        sequential_sort(samples, qtde_amostras);
+        sequential_sort_parallel(samples, qtde_amostras);
         samples_globais = malloc((*qtde_amostras_globais) * sizeof(char*));
 
         // Escolhendo m-1 samples globais igualmente espaçados dentro de cada processador
-        for (int i = 0; i < (*qtde_amostras_globais); i++){
+        for (int i = 0; i < (*qtde_amostras_globais); i++) {
             samples_globais[i] = malloc(MAX_SEQ_LENGTH * sizeof(char));
-            strncpy(samples_globais[i], samples[((i+1) * qtde_amostras) / size], MAX_SEQ_LENGTH);
-            printf(" %s\n", samples_globais[i]);
+            int index = (i * (qtde_amostras - 1)) / (*qtde_amostras_globais);
+            strncpy(samples_globais[i], samples[index], MAX_SEQ_LENGTH);
         }
-    }
-
-    if (rank != 0) {
+    } else {
         samples_globais = malloc((*qtde_amostras_globais) * sizeof(char*));
         for (int i = 0; i < (*qtde_amostras_globais); i++) {
             samples_globais[i] = malloc(MAX_SEQ_LENGTH * sizeof(char));
         }
     }
     
-    for (int i = 0; i < (*qtde_amostras_globais); i++) {
-        MPI_Bcast(samples_globais[i], MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
+    if (rank == 0) {
+    char* global_buffer = malloc((*qtde_amostras_globais) * MAX_SEQ_LENGTH);
+        for (int i = 0; i < (*qtde_amostras_globais); i++) {
+            strncpy(&global_buffer[i * MAX_SEQ_LENGTH], samples_globais[i], MAX_SEQ_LENGTH);
+        }
+        MPI_Bcast(global_buffer, (*qtde_amostras_globais) * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
+        free(global_buffer);
+    } else {
+        char* global_buffer = malloc((*qtde_amostras_globais) * MAX_SEQ_LENGTH);
+        MPI_Bcast(global_buffer, (*qtde_amostras_globais) * MAX_SEQ_LENGTH, MPI_CHAR, 0, MPI_COMM_WORLD);
+        for (int i = 0; i < (*qtde_amostras_globais); i++) {
+            strncpy(samples_globais[i], &global_buffer[i * MAX_SEQ_LENGTH], MAX_SEQ_LENGTH);
+        }
+        free(global_buffer);
     }
 
     return samples_globais;
@@ -272,102 +302,102 @@ char** selecionar_samples_globais(char** samples, int qtde_amostras, int* qtde_a
 
 int* particionar_dados(char** vetor_local, int counter_local, char** samples_globais, int qtde_amostras_globais, int size, int rank) {
     int* sendcounts = calloc(size, sizeof(int));
-    int current_bucket = 0;
     
+    // Ordenar localmente primeiro para busca binária
+    sequential_sort_parallel(vetor_local, counter_local);
+    
+    // Usar busca binária para encontrar buckets
     for (int i = 0; i < counter_local; i++) {
-        // Encontrar o bucket correto para esta sequência
-        while (current_bucket < qtde_amostras_globais && 
-               strcmp(vetor_local[i], samples_globais[current_bucket]) > 0) {
-            current_bucket++;
-        }
+        int left = 0, right = qtde_amostras_globais - 1;
+        int bucket = size - 1; // default último bucket
         
-        if (current_bucket < size) {
-            sendcounts[current_bucket]++;
-        } else {
-            sendcounts[size-1]++; // Último bucket
+        while (left <= right) {
+            int mid = left + (right - left) / 2;
+            int cmp = strcmp(vetor_local[i], samples_globais[mid]);
+            
+            if (cmp <= 0) {
+                bucket = mid;
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
         }
+        sendcounts[bucket]++;
     }
     
     return sendcounts;
 }
 
-// --- trocar_dados (corrigido: usa BYTES no Alltoallv) ---
-int trocar_dados(char** vetor_local, int counter_local, int* sendcounts,
-                 char*** dados_recebidos, char** samples_globais, int num_pivos,
-                 int rank, int size)
-{
-    // 1) todo mundo informa quantos ELEMENTOS enviará a cada destino
+int trocar_dados(char** vetor_local, int counter_local,
+                 int* sendcounts, char*** dados_recebidos,
+                 char** samples_globais, int num_pivos,
+                 int rank, int size) {
+    
+    // Tipo MPI fixo
+    MPI_Datatype dna_type;
+    MPI_Type_contiguous(MAX_SEQ_LENGTH, MPI_CHAR, &dna_type);
+    MPI_Type_commit(&dna_type);
+
+    // Quantos cada processo vai receber
     int *recvcounts = malloc(size * sizeof(int));
     MPI_Alltoall(sendcounts, 1, MPI_INT, recvcounts, 1, MPI_INT, MPI_COMM_WORLD);
 
-    // 2) deslocamentos em ELEMENTOS
-    int *sdispls_el = malloc(size * sizeof(int));
-    int *rdispls_el = malloc(size * sizeof(int));
-    sdispls_el[0] = 0; rdispls_el[0] = 0;
+    // Deslocamentos (em elementos)
+    int *sdispls = malloc(size * sizeof(int));
+    int *rdispls = malloc(size * sizeof(int));
+    sdispls[0] = 0; rdispls[0] = 0;
     for (int i = 1; i < size; i++) {
-        sdispls_el[i] = sdispls_el[i-1] + sendcounts[i-1];
-        rdispls_el[i] = rdispls_el[i-1] + recvcounts[i-1];
+        sdispls[i] = sdispls[i-1] + sendcounts[i-1];
+        rdispls[i] = rdispls[i-1] + recvcounts[i-1];
     }
-    int total_send_el = sdispls_el[size-1] + sendcounts[size-1];
-    int total_recv_el = rdispls_el[size-1] + recvcounts[size-1];
+    int total_recv = rdispls[size-1] + recvcounts[size-1];
 
-    // 3) buffers contíguos em BYTES
-    char *send_buffer = malloc((size_t)total_send_el * MAX_SEQ_LENGTH);
-    char *recv_buffer = malloc((size_t)total_recv_el * MAX_SEQ_LENGTH);
+    // Buffers
+    char *send_buffer = malloc(counter_local * MAX_SEQ_LENGTH);
+    char *recv_buffer = malloc(total_recv * MAX_SEQ_LENGTH);
 
-    // 4) preencher send_buffer ordenando por bucket
+    // Preencher send_buffer já no formato certo
     int *bucket_index = calloc(size, sizeof(int));
     for (int i = 0; i < counter_local; i++) {
         int b = 0;
         while (b < num_pivos && strcmp(vetor_local[i], samples_globais[b]) > 0) b++;
-        int pos_el = sdispls_el[b] + bucket_index[b]++;
-        strncpy(&send_buffer[(size_t)pos_el * MAX_SEQ_LENGTH], vetor_local[i], MAX_SEQ_LENGTH);
+        int pos = sdispls[b] + bucket_index[b]++;
+        strncpy(&send_buffer[pos * MAX_SEQ_LENGTH], vetor_local[i], MAX_SEQ_LENGTH);
     }
 
-    // 5) converter counts/displs para BYTES para o Alltoallv
-    int *sendcounts_b = malloc(size * sizeof(int));
-    int *recvcounts_b = malloc(size * sizeof(int));
-    int *sdispls_b    = malloc(size * sizeof(int));
-    int *rdispls_b    = malloc(size * sizeof(int));
-    for (int i = 0; i < size; i++) {
-        sendcounts_b[i] = sendcounts[i]   * MAX_SEQ_LENGTH;
-        recvcounts_b[i] = recvcounts[i]   * MAX_SEQ_LENGTH;
-        sdispls_b[i]    = sdispls_el[i]   * MAX_SEQ_LENGTH;
-        rdispls_b[i]    = rdispls_el[i]   * MAX_SEQ_LENGTH;
-    }
-
-    // 6) troca efetiva
-    MPI_Alltoallv(send_buffer, sendcounts_b, sdispls_b, MPI_CHAR,
-                  recv_buffer, recvcounts_b, rdispls_b, MPI_CHAR,
+    // Alltoallv com tipo definido
+    MPI_Alltoallv(send_buffer, sendcounts, sdispls, dna_type,
+                  recv_buffer, recvcounts, rdispls, dna_type,
                   MPI_COMM_WORLD);
 
-    // 7) converter recv_buffer (BYTES) para vetor de strings
-    *dados_recebidos = malloc((size_t)total_recv_el * sizeof(char*));
-    for (int i = 0; i < total_recv_el; i++) {
+    // Reconstruir ponteiros
+    *dados_recebidos = malloc(total_recv * sizeof(char*));
+    for (int i = 0; i < total_recv; i++) {
         (*dados_recebidos)[i] = malloc(MAX_SEQ_LENGTH);
-        strncpy((*dados_recebidos)[i], &recv_buffer[(size_t)i * MAX_SEQ_LENGTH], MAX_SEQ_LENGTH);
-        (*dados_recebidos)[i][MAX_SEQ_LENGTH - 1] = '\0';
+        strncpy((*dados_recebidos)[i], &recv_buffer[i * MAX_SEQ_LENGTH], MAX_SEQ_LENGTH);
+        (*dados_recebidos)[i][MAX_SEQ_LENGTH-1] = '\0';
     }
 
-    free(send_buffer); free(recv_buffer);
     free(bucket_index);
-    free(sendcounts_b); free(recvcounts_b);
-    free(sdispls_b);    free(rdispls_b);
-    free(sdispls_el);   free(rdispls_el);
+    free(send_buffer);
+    free(recv_buffer);
+    free(sdispls);
+    free(rdispls);
     free(recvcounts);
 
-    return total_recv_el;
+    MPI_Type_free(&dna_type);
+    return total_recv;
 }
 
 
-// --- coletar_resultados (corrigido: sem Bcast assimétrico) ---
+
 char** coletar_resultados(char** dados_recebidos, int total_recebido,
                           int total_seqs, int rank, int size)
 {
     char **resultado_final = NULL;
     int *recvcounts = NULL, *displs = NULL;
 
-    // 1) root aloca estruturas; não-root não precisa
+
     if (rank == 0) {
         recvcounts = malloc(size * sizeof(int));
         displs = malloc(size * sizeof(int));
@@ -377,12 +407,10 @@ char** coletar_resultados(char** dados_recebidos, int total_recebido,
         }
     }
 
-    // 2) root coleta quantos ELEMENTOS cada rank tem
     MPI_Gather(&total_recebido, 1, MPI_INT,
                (rank == 0 ? recvcounts : NULL), 1, MPI_INT,
                0, MPI_COMM_WORLD);
 
-    // 3) root prepara displs e counts em BYTES
     char *recv_buffer = NULL;
     if (rank == 0) {
         displs[0] = 0;
@@ -395,13 +423,11 @@ char** coletar_resultados(char** dados_recebidos, int total_recebido,
         recv_buffer = malloc((size_t)total_seqs * MAX_SEQ_LENGTH);
     }
 
-    // 4) send_buffer contíguo
     char *send_buffer = malloc((size_t)total_recebido * MAX_SEQ_LENGTH);
     for (int i = 0; i < total_recebido; i++) {
         strncpy(&send_buffer[(size_t)i * MAX_SEQ_LENGTH], dados_recebidos[i], MAX_SEQ_LENGTH);
     }
 
-    // 5) Gatherv final (sem qualquer Bcast extra)
     MPI_Gatherv(send_buffer, total_recebido * MAX_SEQ_LENGTH, MPI_CHAR,
                 recv_buffer, recvcounts, displs, MPI_CHAR,
                 0, MPI_COMM_WORLD);

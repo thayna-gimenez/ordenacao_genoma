@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
     }
 
     MPI_Bcast(&total_seqs, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    float inicio = MPI_Wtime();
 
     // Enviando elementos para cada processador
     char** vetor_local = NULL;
@@ -61,6 +62,11 @@ int main(int argc, char *argv[]) {
 
     char** resultado_final = coletar_resultados(dados_recebidos, total_recebido, total_seqs, rank, size);
 
+
+    float fim = MPI_Wtime();
+    if(rank == 0){
+        printf("%f", fim - inicio);
+    }
     // Liberando memória
     free(vetor_local); 
     free(buffer_local);
